@@ -1,0 +1,287 @@
+---
+# Allows you to add config files
+apmConfig:
+  apm-server.yml: |
+    apm-server:
+      host: "0.0.0.0:8200"
+
+      kibana:
+        enabled: true
+        host: "kibana-kibana.elasticsearch.svc.cluster.local:5601"
+      
+      #ilm:
+        # Supported values are `auto`, `true` and `false`.
+        # `true`: Make use of Elasticsearch's Index Lifecycle Management (ILM) for APM indices. If no Elasticsearch output is
+        # configured or the configured instance does not support ILM, APM Server cannot apply ILM and must create
+        # unmanaged indices instead.
+        # `false`: APM Server does not make use of ILM in Elasticsearch.
+        # `auto`: If an Elasticsearch output is configured with default index and indices settings, and the configured
+        # Elasticsearch instance supports ILM, `auto` will resolve to `true`. Otherwise `auto` will resolve to `false`.
+        # Default value is `auto`.
+        enabled: "false"
+
+    queue: 
+      # Queue type by name (default 'mem').
+      mem:
+        # Max number of events the queue can buffer.
+        events: 8192
+
+        # Hints the minimum number of events stored in the queue,
+        # before providing a batch of events to the outputs.
+        # The default value is set to 2048.
+        # A value of 0 ensures events are immediately available
+        # to be sent to the outputs.
+        flush.min_events: 4096
+
+        # Maximum duration after which events are available to the outputs,
+        # if the number of events stored in the queue is < `flush.min_events`.
+        #flush.timeout: 1s
+    # Sets the maximum number of CPUs that can be executing simultaneously. The
+    # default is the number of logical CPUs available in the system.
+    #max_procs:
+
+    output.elasticsearch:
+      hosts: ["http://elasticsearch-master:9200"]
+      ## If you have security enabled- you'll need to add the credentials
+      ## as environment variables
+      # username: "${ELASTICSEARCH_USERNAME}"
+      # password: "${ELASTICSEARCH_PASSWORD}"
+      ## If SSL is enabled
+      # protocol: https
+      # ssl.certificate_authorities:
+      #  - /usr/share/apm-server/config/certs/elastic-ca.pem
+      #
+      # By using the configuration below, APM documents are stored to separate indices,
+      # depending on their `processor.event`:
+      # - error
+      # - transaction
+      # - span
+      # - sourcemap
+      #
+      # The indices are all prefixed with `apm-%{[observer.version]}`.
+      # To allow managing indices based on their age, all indices (except for sourcemaps)
+      # end with the information of the day they got indexed.
+      # e.g. "apm-7.3.0-transaction-2019.07.20"
+      #
+      # Be aware that you can only specify one Elasticsearch template.
+      # If you modify the index patterns you must also update these configurations accordingly,
+      # as they need to be aligned:
+      # * `setup.template.name`
+      # * `setup.template.pattern`
+      #index: "apm-%{[observer.version]}-%{+yyyyMMdd}"
+      indices:
+        - index: "apm-%{[observer.version]}-sourcemap-%{+yyyyMMdd}"
+          when.contains:
+            processor.event: "sourcemap"
+      
+        - index: "apm-%{[observer.version]}-error-%{+yyyyMMdd}"
+          when.contains:
+            processor.event: "error"
+      
+        - index: "apm-%{[observer.version]}-transaction-%{+yyyyMMdd}"
+          when.contains:
+            processor.event: "transaction"
+      
+        - index: "apm-%{[observer.version]}-span-%{+yyyyMMdd}"
+          when.contains:
+            processor.event: "span"
+      
+        - index: "apm-%{[observer.version]}-metric-%{+yyyyMMdd}"
+          when.contains:
+            processor.event: "metric"
+      
+        - index: "apm-%{[observer.version]}-onboarding-%{+yyyyMMdd}"
+          when.contains:
+            processor.event: "onboarding"
+    
+    # Set to false to disable template loading.
+    setup.template.enabled: false
+
+    # Template name. By default the template name is "apm-%{[observer.version]}"
+    # The template name and pattern has to be set in case the elasticsearch index pattern is modified.
+    #setup.template.name: "apm-%{[observer.version]}"
+
+    # Template pattern. By default the template pattern is "apm-%{[observer.version]}-*" to apply to the default index settings.
+    # The first part is the version of apm-server and then -* is used to match all daily indices.
+    # The template name and pattern has to be set in case the elasticsearch index pattern is modified.
+    #setup.template.pattern: "apm-%{[observer.version]}-*"
+
+    # Path to fields.yml file to generate the template.
+    #setup.template.fields: "${path.config}/fields.yml"
+
+    # Overwrite existing template.
+    #setup.template.overwrite: false
+
+replicas: 2
+
+extraContainers: ""
+# - name: dummy-init
+#   image: busybox
+#   command: ['echo', 'hey']
+
+extraInitContainers: ""
+# - name: dummy-init
+#   image: busybox
+#   command: ['echo', 'hey']
+
+# Extra environment variables to append to the DaemonSet pod spec.
+# This will be appended to the current 'env:' key. You can use any of the kubernetes env
+# syntax here
+extraEnvs: []
+  #  - name: 'ELASTICSEARCH_USERNAME'
+  #    valueFrom:
+  #      secretKeyRef:
+  #        name: elastic-credentials
+  #        key: username
+  #  - name: 'ELASTICSEARCH_PASSWORD'
+  #    valueFrom:
+  #      secretKeyRef:
+  #        name: elastic-credentials
+  #        key: password
+
+# Allows you to load environment variables from kubernetes secret or config map
+envFrom: []
+# - secretRef:
+#     name: env-secret
+# - configMapRef:
+#     name: config-map
+
+extraVolumeMounts: []
+  # - name: extras
+  #   mountPath: /usr/share/extras
+  #   readOnly: true
+
+extraVolumes: []
+  # - name: extras
+  #   emptyDir: {}
+
+image: "docker.elastic.co/apm/apm-server"
+imageTag: "7.8.0"
+imagePullPolicy: "IfNotPresent"
+imagePullSecrets: []
+
+# Whether this chart should self-manage its service account, role, and associated role binding.
+managedServiceAccount: true
+
+podAnnotations: {}
+  # iam.amazonaws.com/role: es-cluster
+
+# additionals labels
+labels: {}
+
+podSecurityContext:
+  runAsUser: 0
+  privileged: false
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  failureThreshold: 3
+  # initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  failureThreshold: 3
+  # initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+resources:
+    requests:
+      cpu: "100m"
+      memory: "100Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1024Mi"
+
+# Custom service account override that the pod will use
+serviceAccount: ""
+
+# A list of secrets and their paths to mount inside the pod
+secretMounts: []
+#  - name: elastic-certificate-pem
+#    secretName: elastic-certificates
+#    path: /usr/share/apm-server/config/certs
+
+terminationGracePeriod: 30
+
+tolerations:
+  - key: "preemptible"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+    # effect: "PreferNoSchedule"
+
+nodeSelector: {}
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: cloud.google.com/gke-nodepool
+          operator: In
+          values:
+            - preemptible
+  # Anti-affinity to disallow deploying client and master nodes on the same worker node
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - topologyKey: "kubernetes.io/hostname"
+        labelSelector:
+          matchLabels:
+            role: apm-server
+
+# This is the PriorityClass settings as defined in
+# https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+priorityClassName: ""
+
+updateStrategy:
+  type: "RollingUpdate"
+
+# Override various naming aspects of this chart
+# Only edit these if you know what you're doing
+nameOverride: ""
+fullnameOverride: ""
+
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: false
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - chart-example.local
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+service:
+  type: ClusterIP
+  port: 8200
+  nodePort: ""
+  annotations: {}
+    # cloud.google.com/load-balancer-type: "Internal"
+    # service.beta.kubernetes.io/aws-load-balancer-internal: 0.0.0.0/0
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    # service.beta.kubernetes.io/openstack-internal-load-balancer: "true"
+    # service.beta.kubernetes.io/cce-load-balancer-internal-vpc: "true"
+
+lifecycle: {}
+  # preStop:
+  #   exec:
+  #     command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
+  # postStart:
+  #   exec:
+  #     command: ["/bin/sh", "-c", "echo Hello from the postStart handler > /usr/share/message"]
